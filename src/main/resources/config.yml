@@ -1,0 +1,15 @@
+# DependencyGrabberPlugin configuration
+
+# An array of plugin names that must always be included
+# when the server starts up
+includes: []
+
+# An array of plugin names that must not be included when
+# the server starts up
+# Behavior stemming from a plugin name in the includes and
+# the excludes list of plugins is undefined
+excludes: []
+
+# Whether or not the plugin should require soft-dependencies
+# when the server starts up as well
+include-soft-dependencies: true
