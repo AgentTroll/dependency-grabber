@@ -1,18 +1,21 @@
 package com.gmail.woodyc40.dependencygrabber;
 
+import lombok.Getter;
+import org.apache.commons.lang.Validate;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.InvalidDescriptionException;
 import org.bukkit.plugin.PluginDescriptionFile;
-import org.bukkit.plugin.PluginLoader;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.plugin.java.JavaPluginLoader;
-import tk.ivybits.agent.AgentLoader;
-import tk.ivybits.agent.Platform;
-import tk.ivybits.agent.Tools;
+import org.yaml.snakeyaml.error.YAMLException;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.instrument.Instrumentation;
+import java.nio.file.Files;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -20,28 +23,47 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.logging.Logger;
 
-public class DependencyGrabber extends JavaPlugin {
-    private static Instrumentation instrumentation;
-    static {
-        try {
-            Tools.loadAgentLibrary();
-            AgentLoader.attachAgentToJVM(Tools.getCurrentPID(), DependencyGrabber.class, AgentLoader.class, Tools.class, Platform.class);
-        } catch (Exception e) {
-            e.printStackTrace();
+public class DependencyGrabber {
+    public static void premain(String string, Instrumentation instrument) {
+        DependencyGrabber grabber = new DependencyGrabber();
+        grabber.grabDependencies(instrument);
+    }
+
+    @Getter
+    private final Logger logger = Logger.getLogger(this.getClass().getSimpleName());
+    @Getter
+    private final File dataFolder = new File(System.getProperty("user.dir"), "DependencyGrabber");
+    private final File configFile = new File(this.dataFolder, "config.yml");
+    private FileConfiguration fileConfiguration;
+
+    public void saveDefaultConfig() {
+        if (!this.configFile.exists()) {
+            try {
+                Files.copy(this.getClass().getResourceAsStream("/config.yml"), this.configFile.toPath());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 
-    public static void agentmain(String string, Instrumentation instrument) {
-        instrumentation = instrument;
+    public FileConfiguration getConfig() {
+        if (this.fileConfiguration == null) {
+            this.fileConfiguration = YamlConfiguration.loadConfiguration(this.configFile);
+        }
 
-        ((DependencyGrabber) Bukkit.getPluginManager().getPlugin("DepedencyGrabber")).grabDependencies(instrument);
+        return this.fileConfiguration;
     }
 
     private Config config;
 
-    @Override
-    public void onLoad() {
+    public DependencyGrabber() {
+        if (!this.dataFolder.exists()) {
+            this.dataFolder.mkdirs();
+        }
     }
 
     public void grabDependencies(Instrumentation instrumentation) {
@@ -103,13 +125,11 @@ public class DependencyGrabber extends JavaPlugin {
         Server server = Bukkit.getServer();
 
         // Hopefully this is the right directory...
-        File directory = this.getDataFolder().getParentFile();
+        File directory = new File(this.getDataFolder().getParentFile(), "plugins");
         for (File file : directory.listFiles()) {
-            PluginLoader loader = new JavaPluginLoader(server);
-
             PluginDescriptionFile description;
             try {
-                description = loader.getPluginDescription(file);
+                description = getPluginDescription(file);
                 String name = description.getName();
                 if (name.equalsIgnoreCase("bukkit") || name.equalsIgnoreCase("minecraft") || name.equalsIgnoreCase("mojang")) {
                     continue;
@@ -289,5 +309,45 @@ public class DependencyGrabber extends JavaPlugin {
         }
 
         return includes;
+    }
+
+    private static PluginDescriptionFile getPluginDescription(File file) throws InvalidDescriptionException {
+        // Copied from PaperSpigot source with no modifications
+
+        Validate.notNull(file, "File cannot be null");
+
+        JarFile jar = null;
+        InputStream stream = null;
+
+        try {
+            jar = new JarFile(file);
+            JarEntry entry = jar.getJarEntry("plugin.yml");
+
+            if (entry == null) {
+                throw new InvalidDescriptionException(new FileNotFoundException("Jar does not contain plugin.yml"));
+            }
+
+            stream = jar.getInputStream(entry);
+
+            return new PluginDescriptionFile(stream);
+
+        } catch (IOException ex) {
+            throw new InvalidDescriptionException(ex);
+        } catch (YAMLException ex) {
+            throw new InvalidDescriptionException(ex);
+        } finally {
+            if (jar != null) {
+                try {
+                    jar.close();
+                } catch (IOException e) {
+                }
+            }
+            if (stream != null) {
+                try {
+                    stream.close();
+                } catch (IOException e) {
+                }
+            }
+        }
     }
 }
