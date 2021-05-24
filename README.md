@@ -30,7 +30,7 @@ the class will be instrumented before the server starts.
 # Building
 
 ``` shell
-git clone https://github.com/AgentTroll/dependency-grabber.git
+git clone https://github.com/caojohnny/dependency-grabber.git
 cd dependency-grabber
 mvn clean install
 ```
